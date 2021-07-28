@@ -289,6 +289,101 @@ def convert_bills_response_to_df(r_bills):
     return flat_bills_df
 
 
+def get_investmentAccount_Nums(info_dict):
+    account_numbers = set()
+
+    for key in info_dict.keys():
+        if key.isnumeric():
+            account_numbers.add(key)
+    
+    print(account_numbers)
+    
+    return account_numbers
+
+
+
+def convert_investment_response_to_dfs(r_investments):
+    info = json.loads(r_investments)
+
+    account_nums =  get_investmentAccount_Nums(info)
+
+    # Filter accounts_dict down to just the investment accounts you want (numeric)
+    account_details = {key:value for key, value in info.items() if key in account_nums}
+    account_details_df = pd.DataFrame(account_details)
+    account_details_df = account_details_df.transpose()
+    account_holding_details_df = account_details_df.copy()
+    account_details_df = account_details_df.drop(['sorted','holdings'], axis=1) 
+    
+    account_details_df = add_logging_fields_to_df(account_details_df) # this is the first finished df
+
+
+
+    account_holding_details_df = account_holding_details_df.drop('sorted',axis=1)
+    holding_df = account_holding_details_df
+    holding_df['holdings'].fillna('{}', inplace=True)
+    
+    
+    # Expand out the holding records 
+
+    holdings_expanded_df = pd.DataFrame()
+
+    for i in holding_df.index:
+        print(f'i is {i}')
+        if holding_df.loc[i]['holdings'] == '{}':
+            print('%s is = {} so skipping', i)
+            continue
+        else:
+            helper_df = pd.DataFrame(holding_df.loc[i]['holdings'])
+    #         print(helper_df.iloc[0])
+            helper_df = helper_df.transpose()
+            holdings_expanded_df = holdings_expanded_df.append(helper_df)
+
+
+    # Add a primary key for the holdings table (account it comes from and the id of the specific holding)
+    holdings_expanded_df['holdings_id'] = holdings_expanded_df['account'] + "-" + holdings_expanded_df['id']
+    holdings_expanded_df.set_index('holdings_id',inplace=True)
+
+    transactions_df = holdings_expanded_df.copy()
+
+    holdings_expanded_df.drop('transactions',axis=1,inplace=True) 
+    holdings_expanded_df = add_logging_fields_to_df(holdings_expanded_df) # This is the finished table
+
+
+    # Expand out the transactions
+    investment_tranasction_df = pd.DataFrame()
+
+    for i in range(transactions_df.shape[0]):
+        
+        # Retain some of the holding header values 
+        symbol = transactions_df.iloc[i]['symbol']
+        h_id = transactions_df.iloc[i]['id']
+        account  = transactions_df.iloc[i]['account']
+        description = transactions_df.iloc[i]['description']
+        
+        temp = transactions_df.iloc[i]['transactions']
+        if temp == []:
+            continue
+        else:
+    #         print(temp)
+            for b in range(len(temp)):
+    #             print('b is', b)
+                b = temp[b]
+                b_df = pd.DataFrame(b, index=[0])
+                b_df['symbol'] = symbol
+                b_df['holding_number'] = h_id
+                b_df['account'] = account
+                b_df['description'] = description
+                
+                investment_tranasction_df = investment_tranasction_df.append(b_df)
+                
+    
+    investment_tranasction_df = add_logging_fields_to_df(investment_tranasction_df) # This is the final table
+
+
+    return account_details_df, holdings_expanded_df, investment_tranasction_df
+
+
+
 # Write mint data to postgress
 def write_to_postgres(clean_df, table_name):
 # Connect to PostGres
@@ -320,45 +415,55 @@ def write_to_postgres(clean_df, table_name):
 
 
 
+def main():
+
+
+    r_accounts = mint.get_accounts(True)
+    accounts_df = convert_response_to_clean_df(r_accounts)
+    write_to_postgres(accounts_df, 'accounts')
+
+
+    r_budgets = mint.get_budgets()
+    budgets_df = convert_budgets_response_to_df(r_budgets)
+    write_to_postgres(budgets_df, 'budgets')
+
+
+    transactions_df = mint.get_transactions()
+    transactions_df = add_logging_fields_to_df(transactions_df)
+    write_to_postgres(transactions_df, 'transactions')
+
+    r_networth = mint.get_net_worth()
+    networth_df = convert_networth_to_df(r_networth)
+    write_to_postgres(networth_df, 'networth')
+
+
+    r_creditscore = mint.get_credit_score()
+    creditscore_df = convert_creditscore_to_df(r_creditscore)
+    write_to_postgres(creditscore_df, 'creditscore')
+
+
+    # Get bills
+
+    print("Bills:")
+    r_bills = mint.get_bills()
+    # print(r_bills)
+    bills_df = convert_bills_response_to_df(r_bills)
+    write_to_postgres(bills_df, 'bills')
 
 
 
-r_accounts = mint.get_accounts(True)
-accounts_df = convert_response_to_clean_df(r_accounts)
-write_to_postgres(accounts_df, 'accounts')
+    # print("Investments:")
+    # Get investments (holdings and transactions)
+    r_investments = mint.get_invests_json()
+
+    accounts_df, holdings_df, investment_transactions_df = convert_investment_response_to_dfs(r_investments)
+    write_to_postgres(accounts_df, 'investment_accounts')
+    write_to_postgres(holdings_df, "investment_holdings")
+    write_to_postgres(investment_transactions_df, "investment_transactions")
 
 
-r_budgets = mint.get_budgets()
-budgets_df = convert_budgets_response_to_df(r_budgets)
-write_to_postgres(budgets_df, 'budgets')
+    # print(investments)
 
 
-transactions_df = mint.get_transactions()
-transactions_df = add_logging_fields_to_df(transactions_df)
-write_to_postgres(transactions_df, 'transactions')
-
-r_networth = mint.get_net_worth()
-networth_df = convert_networth_to_df(r_networth)
-write_to_postgres(networth_df, 'networth')
-
-
-r_creditscore = mint.get_credit_score()
-creditscore_df = convert_creditscore_to_df(r_creditscore)
-write_to_postgres(creditscore_df, 'creditscore')
-
-
-# Get bills
-
-print("Bills:")
-r_bills = mint.get_bills()
-# print(r_bills)
-bills_df = convert_bills_response_to_df(r_bills)
-write_to_postgres(bills_df, 'bills')
-
-
-
-# print("Investments:")
-# Get investments (holdings and transactions)
-investments = mint.get_invests_json()
-print(f'Investment type is {type(investments)}')
-# print(investments)
+if __name__ == "__main__":
+    main()
