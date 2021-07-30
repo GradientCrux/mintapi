@@ -1,0 +1,1 @@
+cd /home/gradientcrux/repos/mint/mintapi && python mint_to_postgres.py
