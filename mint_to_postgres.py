@@ -41,7 +41,7 @@ mint = mintapi.Mint(
     mfa_method='sms',  # Can be 'sms' (default), 'email', or 'soft-token'.
                        # if mintapi detects an MFA request, it will trigger the requested method
                        # and prompt on the command line.
-    headless=False,  # Whether the chromedriver should work without opening a
+    headless=True,  # Whether the chromedriver should work without opening a
                      # visible window (useful for server-side deployments)
     mfa_input_callback=None,  # A callback accepting a single argument (the prompt)
                               # which returns the user-inputted 2FA code. By default
@@ -296,7 +296,7 @@ def get_investmentAccount_Nums(info_dict):
         if key.isnumeric():
             account_numbers.add(key)
     
-    print(account_numbers)
+    # print(account_numbers)
     
     return account_numbers
 
@@ -328,7 +328,7 @@ def convert_investment_response_to_dfs(r_investments):
     holdings_expanded_df = pd.DataFrame()
 
     for i in holding_df.index:
-        print(f'i is {i}')
+        # print(f'i is {i}')
         if holding_df.loc[i]['holdings'] == '{}':
             print('%s is = {} so skipping', i)
             continue
@@ -394,7 +394,7 @@ def write_to_postgres(clean_df, table_name):
     try:
 
         clean_df.to_sql(table_name, postgreSQLConnection, if_exists='append')
-        print(f"You succeeded at {table_name}" )
+        # print(f"You succeeded at {table_name}" )
     except ValueError as vx:
 
         print(vx)
@@ -444,7 +444,7 @@ def main():
 
     # Get bills
 
-    print("Bills:")
+    
     r_bills = mint.get_bills()
     # print(r_bills)
     bills_df = convert_bills_response_to_df(r_bills)
@@ -462,7 +462,7 @@ def main():
     write_to_postgres(investment_transactions_df, "investment_transactions")
 
 
-    # print(investments)
+    print("\n\n\n All data from mint has been written to postgres")
 
 
 if __name__ == "__main__":
